@@ -201,6 +201,15 @@ body {
     align-items: center;
 }
 
+.profile-photo {
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
 .image-placeholder {
     width: 300px;
     height: 300px;
@@ -609,6 +618,12 @@ section {
     .btn {
         width: 100%;
         text-align: center;
+    }
+
+    .profile-photo,
+    .image-placeholder {
+        width: 250px;
+        height: 250px;
     }
 }
 
