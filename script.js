@@ -109,14 +109,30 @@ window.addEventListener('scroll', () => {
 
 // Fetch App Store data for project detail pages
 function fetchAppStoreData(appId) {
-    const apiUrl = `https://itunes.apple.com/lookup?id=${appId}&country=tr`;
+    // Try with country parameter first, then without if it fails
+    const apiUrl = `https://itunes.apple.com/lookup?id=${appId}&country=tr&entity=software`;
     
     return fetch(apiUrl)
-        .then(response => response.json())
-        .then(data => {
-            if (data.results && data.results.length > 0) {
-                return data.results[0];
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
+            return response.json();
+        })
+        .then(data => {
+            console.log('iTunes API response:', data);
+            if (data.results && data.results.length > 0) {
+                const appData = data.results[0];
+                console.log('App data fields:', Object.keys(appData));
+                console.log('Screenshot URLs available:', {
+                    screenshotUrls: appData.screenshotUrls?.length || 0,
+                    screenshots: appData.screenshots?.length || 0,
+                    ipadScreenshotUrls: appData.ipadScreenshotUrls?.length || 0,
+                    iphoneScreenshotUrls: appData.iphoneScreenshotUrls?.length || 0
+                });
+                return appData;
+            }
+            console.log('No results found in API response');
             return null;
         })
         .catch(error => {
@@ -184,18 +200,21 @@ function updateProjectDetailWithAppStoreData(appId, options = {}) {
             }
         }
 
-        // Update image placeholder with app icon
-        const imagePlaceholder = document.querySelector('.image-placeholder-large');
-        if (imagePlaceholder && appData.artworkUrl512) {
-            const img = document.createElement('img');
-            img.src = appData.artworkUrl512;
-            img.alt = appData.trackName;
-            img.style.width = '100%';
-            img.style.height = '100%';
-            img.style.objectFit = 'cover';
-            img.style.borderRadius = '12px';
-            imagePlaceholder.innerHTML = '';
-            imagePlaceholder.appendChild(img);
+        // Update app icon in detail page
+        const appIcon = document.querySelector('.project-detail-app-icon');
+        if (appIcon && appData.artworkUrl512) {
+            appIcon.src = appData.artworkUrl512.replace('512x512bb', '200x200bb');
+            appIcon.style.display = 'block';
+            const placeholder = appIcon.nextElementSibling;
+            if (placeholder) {
+                placeholder.style.display = 'none';
+            }
+        }
+
+        // Update app title if available
+        const appTitle = document.querySelector('.project-detail-app-title');
+        if (appTitle && appData.trackName) {
+            appTitle.textContent = appData.trackName;
         }
 
         // Update description if provided
@@ -212,8 +231,146 @@ function updateProjectDetailWithAppStoreData(appId, options = {}) {
     });
 }
 
+// Load app icons for project cards on main page
+function loadProjectCardIcons() {
+    const projectCards = document.querySelectorAll('.project-card[data-app-id]');
+    
+    projectCards.forEach(card => {
+        const appId = card.getAttribute('data-app-id');
+        if (appId) {
+            fetchAppStoreData(appId).then(appData => {
+                if (appData && appData.artworkUrl512) {
+                    const iconImg = card.querySelector('.project-app-icon');
+                    if (iconImg) {
+                        iconImg.src = appData.artworkUrl512.replace('512x512bb', '200x200bb');
+                        iconImg.style.display = 'block';
+                        const placeholder = iconImg.nextElementSibling;
+                        if (placeholder) {
+                            placeholder.style.display = 'none';
+                        }
+                    }
+                }
+            });
+        }
+    });
+}
+
+// Load screenshots for detail pages from local images folder
+function loadAppScreenshots(appId, containerSelector) {
+    const container = document.querySelector(containerSelector);
+    if (!container) {
+        console.log('Container not found:', containerSelector);
+        return;
+    }
+    
+    // Map app IDs to image folder names
+    const imageFolders = {
+        '6753812445': 'word_impostor',
+        '6752341934': 'what_to_watch_today',
+        '6754171250': 'cocktail_clob_go'
+    };
+    
+    const folderName = imageFolders[appId];
+    if (!folderName) {
+        console.log('No image folder found for appId:', appId);
+        container.innerHTML = '<p style="color: var(--text-secondary); padding: 2rem; text-align: center;">Ekran görüntüleri bulunamadı.</p>';
+        return;
+    }
+    
+    // Clear existing content
+    container.innerHTML = '';
+    
+    // Create screenshots grid
+    const screenshotsGrid = document.createElement('div');
+    screenshotsGrid.className = 'screenshots-grid';
+    
+    // Load screenshots from images folder (1-5)
+    for (let i = 1; i <= 5; i++) {
+        const screenshotItem = document.createElement('div');
+        screenshotItem.className = 'screenshot-item';
+        
+        const img = document.createElement('img');
+        img.src = `images/${folderName}/400x800bb-${i}.png`;
+        img.alt = `App Screenshot ${i}`;
+        img.loading = 'lazy';
+        img.onerror = function() {
+            // If numbered screenshot doesn't exist, try without number for first one
+            if (i === 1) {
+                this.src = `images/${folderName}/400x800bb.png`;
+            } else {
+                this.parentElement.style.display = 'none';
+            }
+        };
+        
+        // Add click event to open modal
+        img.addEventListener('click', function() {
+            openImageModal(this.src, this.alt);
+        });
+        
+        screenshotItem.appendChild(img);
+        screenshotsGrid.appendChild(screenshotItem);
+    }
+    
+    container.appendChild(screenshotsGrid);
+}
+
+// Image Modal functions
+function openImageModal(src, alt) {
+    const modal = document.getElementById('imageModal');
+    const modalImg = document.getElementById('modalImage');
+    const caption = document.getElementById('modalCaption');
+    
+    if (!modal || !modalImg) return;
+    
+    modal.classList.add('active');
+    modalImg.src = src;
+    caption.textContent = alt || 'Ekran Görüntüsü';
+    
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden';
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('imageModal');
+    if (!modal) return;
+    
+    modal.classList.remove('active');
+    
+    // Restore body scroll
+    document.body.style.overflow = 'auto';
+}
+
 // Auto-fetch data for project pages
 document.addEventListener('DOMContentLoaded', () => {
+    // Setup image modal
+    const modal = document.getElementById('imageModal');
+    const closeBtn = document.querySelector('.modal-close');
+    
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeImageModal);
+    }
+    
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                closeImageModal();
+            }
+        });
+    }
+    
+    // Close modal on ESC key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeImageModal();
+        }
+    });
+    
+    // Check if we're on the main page with project cards
+    const projectCards = document.querySelectorAll('.project-card[data-app-id]');
+    if (projectCards.length > 0) {
+        loadProjectCardIcons();
+    }
+    
     // Check if we're on a project detail page
     const projectDetailSection = document.querySelector('.project-detail[data-app-id]');
     
@@ -224,6 +381,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateTitle: false,
                 updateDescription: false
             });
+            
+            // Load screenshots
+            const screenshotsContainer = document.querySelector('.project-screenshots');
+            if (screenshotsContainer) {
+                loadAppScreenshots(appId, '.project-screenshots');
+            }
         }
     }
 });
